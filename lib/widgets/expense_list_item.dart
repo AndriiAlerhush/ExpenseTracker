@@ -10,11 +10,14 @@ class ExpenseListItem extends StatelessWidget {
     super.key,
     required Expense expense,
     required double percentage,
-  }) : _percentage = percentage,
+    required void Function()? onTap,
+  }) : _onTap = onTap,
+       _percentage = percentage,
        _expense = expense;
 
   final Expense _expense;
   final double _percentage;
+  final void Function()? _onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -24,41 +27,46 @@ class ExpenseListItem extends StatelessWidget {
         right: 16,
         bottom: 12,
       ),
-      child: ListTile(
-        leading: Icon(
-          iconCategories[_expense.category],
-          color: colorCategories[_expense.category],
-        ),
-        title: Text(
-          capitalize(_expense.category.name),
-          style: Theme.of(context).textTheme.bodyLarge,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        subtitle: _expense.comment == null
-            ? null
-            : SizedBox(
-                width: 10,
-                child: Text(
-                  _expense.comment!,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+      child: InkWell(
+        onTap: _onTap,
+        splashFactory: NoSplash.splashFactory,
+        highlightColor: Colors.transparent,
+        child: ListTile(
+          leading: Icon(
+            iconCategories[_expense.category],
+            color: colorCategories[_expense.category],
+          ),
+          title: Text(
+            capitalize(_expense.category.name),
+            style: Theme.of(context).textTheme.bodyLarge,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          subtitle: _expense.comment == null
+              ? null
+              : SizedBox(
+                  width: 10,
+                  child: Text(
+                    _expense.comment!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-              ),
-        trailing: SizedBox(
-          width: 140,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                "${_percentage.round()}%".padLeft(4),
-                style: Theme.of(context).textTheme.bodyLarge,
-              ),
-              Text(
-                "${amountFormat(_expense.amount)} RON",
-                style: Theme.of(context).textTheme.bodyLarge,
-              ),
-            ],
+          trailing: SizedBox(
+            width: 140,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  "${_percentage.round()}%".padLeft(4),
+                  style: Theme.of(context).textTheme.bodyLarge,
+                ),
+                Text(
+                  "${amountFormat(_expense.amount)} RON",
+                  style: Theme.of(context).textTheme.bodyLarge,
+                ),
+              ],
+            ),
           ),
         ),
       ),

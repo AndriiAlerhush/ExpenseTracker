@@ -6,7 +6,7 @@ import 'package:expense_tracker/models/color_categories.dart';
 import 'package:expense_tracker/models/enum_categories.dart';
 import 'package:expense_tracker/models/expense.dart';
 import 'package:expense_tracker/models/icon_categories.dart';
-import 'package:expense_tracker/providers/expense_provider.dart';
+import 'package:expense_tracker/providers/expense_controller_provider.dart';
 import 'package:expense_tracker/utilities/formatters.dart';
 
 class AddExpenseScreen extends ConsumerStatefulWidget {
@@ -161,7 +161,9 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                         createdAt: DateTime.now(),
                       );
 
-                      ref.read(expensesProvider.notifier).addExpense(expense);
+                      ref
+                          .read(expenseControllerProvider.notifier)
+                          .addExpense(expense);
 
                       Navigator.pop(context);
                     },

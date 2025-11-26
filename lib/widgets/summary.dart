@@ -1,10 +1,11 @@
-import 'package:expense_tracker/models/enum_period.dart';
-import 'package:expense_tracker/providers/selected_period_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:date_format/date_format.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:expense_tracker/providers/daily_expenses_provider.dart';
+import 'package:expense_tracker/providers/previous_selected_period_provider.dart';
+import 'package:expense_tracker/models/enum_period.dart';
+import 'package:expense_tracker/providers/selected_period_provider.dart';
+import 'package:expense_tracker/providers/selected_period_expenses_provider.dart';
 import 'package:expense_tracker/providers/selected_date_provider.dart';
 import 'package:expense_tracker/models/expense.dart';
 import 'package:expense_tracker/utilities/formatters.dart';
@@ -15,14 +16,43 @@ class Summary extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final filteredExpenses = ref.watch<List<Expense>>(dailyExpensesProvider);
-    final selectedDate = ref.watch(selectedDateProvider);
-    final selectedPeriod = ref.watch<EnumPeriod>(selectedPeriodProvider);
-
-    final sum = filteredExpenses.fold(
-      0.0,
-      (currentSum, expense) => currentSum += expense.amount,
+    final filteredExpenses = ref.watch<AsyncValue<List<Expense>>>(
+      selectedPeriodExpenseProvider,
     );
+    final selectedDate = ref.watch<DateTime>(selectedDateProvider);
+    final selectedPeriod = ref.watch<EnumPeriod>(selectedPeriodProvider);
+    final selectedDateRange = ref.watch<DateTimeRange?>(selectedRangeProvider);
+
+    final sumWidget = filteredExpenses.when(
+      data: (expenses) {
+        final sum = expenses.fold(
+          0.0,
+          (currentSum, expense) => currentSum += expense.amount,
+        );
+
+        return Text(
+          key: Key(sum.toString()),
+          "${amountFormat(sum)} RON",
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        );
+      },
+      loading: () => const SizedBox(
+        height: 20,
+        width: 20,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      ),
+      error: (error, stack) => Text(
+        "Error",
+        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      skipLoadingOnReload: true,
+    );
+
+    final date = _getDate(selectedDate, selectedPeriod, selectedDateRange);
 
     return Card(
       margin: const EdgeInsets.only(
@@ -64,10 +94,9 @@ class Summary extends ConsumerWidget {
                   ),
                 ],
                 selected: {selectedPeriod},
-                onSelectionChanged: (Set<EnumPeriod> newSelection) {
-                  ref
-                      .read(selectedPeriodProvider.notifier)
-                      .set(newSelection.first);
+                onSelectionChanged: (Set<EnumPeriod> newSelection) async {
+                  final clickedPeriod = newSelection.first;
+                  await _onChangedPeriodSelection(context, ref, clickedPeriod);
                 },
                 showSelectedIcon: false,
               ),
@@ -75,38 +104,42 @@ class Summary extends ConsumerWidget {
               Stack(
                 alignment: Alignment.center,
                 children: [
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: IconButton(
-                      onPressed: () {
-                        ref
-                            .read(selectedDateProvider.notifier)
-                            .substract(const Duration(days: 1));
-                      },
-                      icon: const Icon(Icons.arrow_back),
+                  if (selectedPeriod != EnumPeriod.period)
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: IconButton(
+                        onPressed: () {
+                          ref
+                              .read(selectedDateProvider.notifier)
+                              .navigate(-1, selectedPeriod);
+                        },
+                        icon: const Icon(Icons.arrow_back),
+                      ),
+                    ),
+                  TextButton(
+                    onPressed: () async {
+                      await _showDatePicker(context, ref);
+                    },
+                    child: Text(
+                      date,
+                      key: ValueKey(date),
                     ),
                   ),
-                  TextButton(
-                    onPressed: () {},
-                    child: Text(_getDate(selectedDate)),
-                  ),
-                  if (selectedDate.isBefore(
-                    DateTime.now().subtract(const Duration(days: 1)),
-                  ))
+                  if (selectedPeriod != EnumPeriod.period &&
+                      _canGoNext(selectedDate, selectedPeriod))
                     Align(
                       alignment: Alignment.centerRight,
                       child: IconButton(
                         onPressed: () {
                           ref
                               .read(selectedDateProvider.notifier)
-                              .add(const Duration(days: 1));
+                              .navigate(1, selectedPeriod);
                         },
                         icon: const Icon(Icons.arrow_forward),
                       ),
                     ),
-                  if (selectedDate.isBefore(
-                    DateTime.now().subtract(const Duration(days: 1)),
-                  ))
+                  if (selectedPeriod != EnumPeriod.period &&
+                      _canGoNext(selectedDate, selectedPeriod))
                     Padding(
                       padding: const EdgeInsets.only(right: 40),
                       child: Align(
@@ -123,14 +156,10 @@ class Summary extends ConsumerWidget {
                     ),
                 ],
               ),
-              // const SizedBox(height: 12),
               Stack(
                 alignment: Alignment.center,
                 children: [
-                  Text(
-                    "${amountFormat(sum)} RON",
-                    style: Theme.of(context).textTheme.headlineSmall,
-                  ),
+                  sumWidget,
                   Padding(
                     padding: const EdgeInsets.only(right: 12),
                     child: Align(
@@ -170,12 +199,44 @@ class Summary extends ConsumerWidget {
     );
   }
 
-  String _getDate(DateTime date) {
+  String _getDate(
+    DateTime date,
+    EnumPeriod period,
+    DateTimeRange? range,
+  ) {
+    final normalizedDate = DateUtils.dateOnly(date);
+
+    if (period == EnumPeriod.month) {
+      return formatDate(normalizedDate, [MM, ' ', yyyy]);
+    }
+    if (period == EnumPeriod.year) {
+      return formatDate(normalizedDate, [yyyy]);
+    }
+    if (period == EnumPeriod.week) {
+      final startOfWeek = normalizedDate.subtract(
+        Duration(days: normalizedDate.weekday - 1),
+      );
+
+      final endOfWeek = normalizedDate.add(
+        Duration(days: 7 - normalizedDate.weekday),
+      );
+
+      return "${formatDate(startOfWeek, [dd, ' ', M])} - ${formatDate(endOfWeek, [dd, ' ', M])}, ${normalizedDate.year}";
+    }
+    if (period == EnumPeriod.period) {
+      if (range == null) return "";
+
+      final startDate = range.start;
+      final endDate = range.end;
+
+      return "${formatDate(startDate, [dd, ' ', M])} - ${formatDate(endDate, [dd, ' ', M])}, ${normalizedDate.year}";
+    }
+
+    // Day
     DateTime todayDate = DateUtils.dateOnly(DateTime.now());
     DateTime yesterdayDate = DateUtils.dateOnly(
       DateTime.now(),
     ).subtract(const Duration(days: 1));
-    DateTime normalizedDate = DateUtils.dateOnly(date);
 
     String prefix = "";
 
@@ -187,8 +248,140 @@ class Summary extends ConsumerWidget {
       prefix = "Yesterday, ";
     }
 
-    String finalDate = "$prefix${formatDate(date, [dd, ' ', MM, ' ', yyyy])}";
+    String result =
+        "$prefix${formatDate(normalizedDate, [dd, ' ', MM, ' ', yyyy])}";
 
-    return finalDate;
+    return result;
+  }
+
+  bool _canGoNext(DateTime selectedDate, EnumPeriod selectedPeriod) {
+    final normalizedSelectedDate = DateUtils.dateOnly(selectedDate);
+    final normalizedToday = DateUtils.dateOnly(DateTime.now());
+
+    switch (selectedPeriod) {
+      case EnumPeriod.day:
+        return normalizedSelectedDate.isBefore(normalizedToday);
+
+      case EnumPeriod.week:
+        final startOfCurrentWeek = normalizedToday.subtract(
+          Duration(days: normalizedToday.weekday - 1),
+        );
+
+        final startOfSelectedWeek = normalizedSelectedDate.subtract(
+          Duration(days: normalizedSelectedDate.weekday - 1),
+        );
+
+        return startOfSelectedWeek.isBefore(startOfCurrentWeek);
+
+      case EnumPeriod.month:
+        return (normalizedSelectedDate.year < normalizedToday.year) ||
+            (normalizedSelectedDate.year == normalizedToday.year &&
+                normalizedSelectedDate.month < normalizedToday.month);
+
+      case EnumPeriod.year:
+        return normalizedSelectedDate.year < normalizedToday.year;
+
+      default:
+        return normalizedSelectedDate.isBefore(normalizedToday);
+    }
+  }
+
+  Future<DateTimeRange?> _showDateRangeTimePicker(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    final now = DateTime.now();
+    final initialRange = ref.read(selectedRangeProvider);
+
+    return await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(now.year - 5),
+      lastDate: now,
+      locale: const Locale('en', 'GB'),
+      initialDateRange: initialRange,
+    );
+  }
+
+  Future<void> _showDatePicker(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    final now = DateTime.now();
+    final initialDate = ref.read(selectedDateProvider);
+    final selectedPeriod = ref.read(selectedPeriodProvider);
+
+    if (selectedPeriod == EnumPeriod.period) {
+      final pickedRange = await _showDateRangeTimePicker(context, ref);
+
+      if (pickedRange != null) {
+        ref.read(selectedRangeProvider.notifier).state = pickedRange;
+        ref.read(selectedDateProvider.notifier).set(pickedRange.start);
+      } else {
+        final previousPeriod = ref.read(previousSelectedPeriodProvider);
+        ref.read(selectedRangeProvider.notifier).state = null;
+        ref.read(selectedPeriodProvider.notifier).set(previousPeriod);
+      }
+
+      return;
+    }
+
+    DatePickerMode initialMode = DatePickerMode.day;
+
+    String? helpText;
+
+    if (selectedPeriod == EnumPeriod.week) {
+      helpText = "Select any day in the desired week";
+    } else if (selectedPeriod == EnumPeriod.month) {
+      helpText = "Select any day in the desired month";
+    } else if (selectedPeriod == EnumPeriod.year) {
+      initialMode = DatePickerMode.year;
+      helpText = "Select any day in the desired year";
+    }
+
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(now.year - 5),
+      lastDate: now,
+      initialDatePickerMode: initialMode,
+      helpText: helpText,
+      locale: const Locale('en', 'GB'),
+    );
+
+    if (pickedDate != null) {
+      ref.read(selectedDateProvider.notifier).set(pickedDate);
+    }
+  }
+
+  Future<void> _onChangedPeriodSelection(
+    BuildContext context,
+    WidgetRef ref,
+    EnumPeriod clickedPeriod,
+  ) async {
+    if (clickedPeriod == EnumPeriod.period) {
+      final pickedRange = await _showDateRangeTimePicker(
+        context,
+        ref,
+      );
+
+      if (pickedRange == null) {
+        ref.read(selectedRangeProvider.notifier).state = null;
+        return;
+      }
+
+      ref.read(selectedRangeProvider.notifier).state = pickedRange;
+      ref.read(selectedDateProvider.notifier).set(pickedRange.start);
+      ref.read(selectedPeriodProvider.notifier).set(EnumPeriod.period);
+    } else {
+      final currentActivePeriod = ref.read(
+        selectedPeriodProvider,
+      );
+
+      if (currentActivePeriod == EnumPeriod.period) {
+        ref.read(selectedDateProvider.notifier).set(DateTime.now());
+      }
+
+      ref.read(selectedPeriodProvider.notifier).set(clickedPeriod);
+    }
   }
 }

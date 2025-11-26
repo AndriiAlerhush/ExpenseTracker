@@ -1,5 +1,5 @@
 enum Category {
-  hearth,
+  health,
   food,
   shopping,
 }

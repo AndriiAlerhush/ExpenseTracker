@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:expense_tracker/main.dart';
 import 'package:expense_tracker/utilities/dialog_utils.dart';
-import 'package:expense_tracker/providers/expense_provider.dart';
+import 'package:expense_tracker/providers/expense_controller_provider.dart';
 import 'package:expense_tracker/screens/expense_screen.dart';
 import 'package:expense_tracker/widgets/expense_list_item.dart';
 import 'package:expense_tracker/models/expense.dart';
@@ -33,32 +34,52 @@ class ExpensesList extends ConsumerWidget {
         }
 
         return Dismissible(
-          key: Key(_expenses[index].id.toString()),
+          key: ValueKey(_expenses[index].id),
           direction: DismissDirection.endToStart,
+          background: Padding(
+            padding: const EdgeInsets.only(
+              right: 16,
+              bottom: 12,
+              left: 16,
+            ),
+            child: Container(
+              height: 40,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                color: Theme.of(context).colorScheme.error.withAlpha(215),
+              ),
+              alignment: Alignment.centerRight,
+              padding: const EdgeInsets.only(right: 16),
+              child: const Icon(
+                Icons.delete,
+                color: Colors.white,
+                size: 28,
+              ),
+            ),
+          ),
           confirmDismiss: (direction) async {
             return await showDeleteConfirmDialog(context);
           },
           onDismissed: (direction) {
             final expense = _expenses[index];
-            ref.read(expensesProvider.notifier).deleteExpense(expense);
-            _showSnackBar(context, ref, expense);
+            ref
+                .read(expenseControllerProvider.notifier)
+                .deleteExpense(expense.id);
+            _showSnackBar(ref, expense);
           },
-          child: InkWell(
-            splashFactory: NoSplash.splashFactory,
-            onTap: () {
-              _showExpenseScreen(ctx, ref, _expenses[index]);
+          child: ExpenseListItem(
+            expense: _expenses[index],
+            percentage: percentage,
+            onTap: () async {
+              await _showExpenseScreen(ctx, ref, _expenses[index]);
             },
-            child: ExpenseListItem(
-              expense: _expenses[index],
-              percentage: percentage,
-            ),
           ),
         );
       },
     );
   }
 
-  void _showExpenseScreen(
+  Future<void> _showExpenseScreen(
     BuildContext context,
     WidgetRef ref,
     Expense expense,
@@ -76,29 +97,27 @@ class ExpensesList extends ConsumerWidget {
 
     if (shouldDelete == null || !shouldDelete || !context.mounted) return;
 
-    ref.read(expensesProvider.notifier).deleteExpense(expense);
-    _showSnackBar(context, ref, expense);
+    ref.read(expenseControllerProvider.notifier).deleteExpense(expense.id);
+
+    _showSnackBar(ref, expense);
   }
 
-  void _showSnackBar(BuildContext context, WidgetRef ref, Expense expense) {
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(
+  void _showSnackBar(WidgetRef ref, Expense expense) {
+    final notifier = ref.read(expenseControllerProvider.notifier);
+
+    scaffoldMessengerKey.currentState?.clearSnackBars();
+
+    scaffoldMessengerKey.currentState?.showSnackBar(
       SnackBar(
         content: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text("Expense deleted."),
-            Spacer(),
             TextButton(
               onPressed: () {
                 HapticFeedback.lightImpact();
-
-                ref.read(expensesProvider.notifier).addExpense(expense);
-
-                ScaffoldMessenger.of(
-                  context,
-                ).hideCurrentSnackBar();
+                notifier.restoreExpense(expense);
+                scaffoldMessengerKey.currentState?.hideCurrentSnackBar();
               },
               child: const Text("Undo"),
             ),

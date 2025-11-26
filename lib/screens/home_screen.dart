@@ -1,7 +1,7 @@
-import 'package:expense_tracker/providers/daily_expenses_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:expense_tracker/providers/selected_period_expenses_provider.dart';
 import 'package:expense_tracker/widgets/expenses_list.dart';
 import 'package:expense_tracker/models/expense.dart';
 import 'package:expense_tracker/widgets/drawer.dart';
@@ -12,7 +12,38 @@ class HomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final dailyExpenses = ref.watch<List<Expense>>(dailyExpensesProvider);
+    final filteredExpenses = ref.watch<AsyncValue<List<Expense>>>(
+      selectedPeriodExpenseProvider,
+    );
+
+    Widget content = filteredExpenses.when(
+      data: (expenses) {
+        if (expenses.isEmpty) {
+          return Expanded(
+            child: Center(
+              child: Text(
+                "No expenses for the selected period.",
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+            ),
+          );
+        } else {
+          return Expanded(
+            child: ExpensesList(expenses: expenses),
+          );
+        }
+      },
+      error: (error, stackTrace) {
+        return const Text("ERROR");
+      },
+      loading: () {
+        return Expanded(
+          child: const Center(
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        );
+      },
+    );
 
     return Scaffold(
       appBar: AppBar(
@@ -55,9 +86,7 @@ class HomeScreen extends ConsumerWidget {
           const SizedBox(height: 16),
           const Summary(),
           const SizedBox(height: 16),
-          Expanded(
-            child: ExpensesList(expenses: dailyExpenses),
-          ),
+          content,
         ],
       ),
     );
