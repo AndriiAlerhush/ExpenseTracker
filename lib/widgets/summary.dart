@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:date_format/date_format.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:expense_tracker/providers/previous_selected_period_provider.dart';
@@ -44,7 +45,7 @@ class Summary extends ConsumerWidget {
         child: CircularProgressIndicator(strokeWidth: 2),
       ),
       error: (error, stack) => Text(
-        "Error",
+        "ERROR",
         style: Theme.of(context).textTheme.headlineSmall?.copyWith(
           fontWeight: FontWeight.bold,
         ),
@@ -95,6 +96,7 @@ class Summary extends ConsumerWidget {
                 ],
                 selected: {selectedPeriod},
                 onSelectionChanged: (Set<EnumPeriod> newSelection) async {
+                  HapticFeedback.lightImpact();
                   final clickedPeriod = newSelection.first;
                   await _onChangedPeriodSelection(context, ref, clickedPeriod);
                 },
@@ -109,6 +111,7 @@ class Summary extends ConsumerWidget {
                       alignment: Alignment.centerLeft,
                       child: IconButton(
                         onPressed: () {
+                          HapticFeedback.lightImpact();
                           ref
                               .read(selectedDateProvider.notifier)
                               .navigate(-1, selectedPeriod);
@@ -118,6 +121,7 @@ class Summary extends ConsumerWidget {
                     ),
                   TextButton(
                     onPressed: () async {
+                      HapticFeedback.lightImpact();
                       await _showDatePicker(context, ref);
                     },
                     child: Text(
@@ -131,6 +135,7 @@ class Summary extends ConsumerWidget {
                       alignment: Alignment.centerRight,
                       child: IconButton(
                         onPressed: () {
+                          HapticFeedback.lightImpact();
                           ref
                               .read(selectedDateProvider.notifier)
                               .navigate(1, selectedPeriod);
@@ -146,6 +151,7 @@ class Summary extends ConsumerWidget {
                         alignment: Alignment.centerRight,
                         child: IconButton(
                           onPressed: () {
+                            HapticFeedback.lightImpact();
                             ref
                                 .read(selectedDateProvider.notifier)
                                 .set(DateTime.now());
@@ -168,15 +174,20 @@ class Summary extends ConsumerWidget {
                         style: ElevatedButton.styleFrom(
                           shape: const CircleBorder(),
                           padding: const EdgeInsets.all(
-                            20,
+                            16,
                           ),
                           backgroundColor: Colors.orange,
                           foregroundColor: Colors.black,
                         ),
                         onPressed: () {
-                          _showAddExpenseScreen(context);
+                          HapticFeedback.lightImpact();
+                          ScaffoldMessenger.of(context).clearSnackBars();
+                          _showAddExpenseScreen(context, selectedDate);
                         },
-                        child: const Icon(Icons.add),
+                        child: const Icon(
+                          Icons.add,
+                          size: 26,
+                        ),
                       ),
                     ),
                   ),
@@ -189,12 +200,14 @@ class Summary extends ConsumerWidget {
     );
   }
 
-  void _showAddExpenseScreen(BuildContext context) {
+  void _showAddExpenseScreen(BuildContext context, DateTime selectedDate) {
     Navigator.of(
       context,
     ).push(
       MaterialPageRoute(
-        builder: (ctx) => AddExpenseScreen(),
+        builder: (ctx) => AddExpenseScreen(
+          selectedDate: selectedDate,
+        ),
       ),
     );
   }

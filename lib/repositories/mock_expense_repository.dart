@@ -69,6 +69,7 @@ class MockExpenseRepository implements IExpenseCRUD {
     await Future.delayed(_crudDelay);
 
     final index = _mockStorage.indexWhere((element) => element.id == id);
+
     if (index != -1) {
       _mockStorage[index] = newExpenseData;
       _emitUpdate();

@@ -7,24 +7,13 @@ import 'package:expense_tracker/providers/expense_list_provider.dart';
 import 'package:expense_tracker/providers/selected_date_provider.dart';
 import 'package:expense_tracker/models/expense.dart';
 
-// final dailyExpensesProvider = Provider<AsyncValue<List<Expense>>>((ref) {
-//   final allExpenses = ref.watch(expenseListProvider);
-//   final selectedDate = ref.watch(selectedDateProvider);
-//   final normalizedSelectedDate = DateUtils.dateOnly(selectedDate);
-
-//   return allExpenses.whenData((expenses) {
-//     return expenses.where((expense) {
-//       return DateUtils.dateOnly(expense.date) == normalizedSelectedDate;
-//     }).toList();
-//   });
-// });
-
 final selectedPeriodExpenseProvider = Provider<AsyncValue<List<Expense>>>((
   ref,
 ) {
   final allExpensesAsync = ref.watch(expenseListProvider);
   final selectedDate = ref.watch(selectedDateProvider);
   final selectedPeriod = ref.watch(selectedPeriodProvider);
+  final selectedRangePeriod = ref.watch(selectedRangeProvider);
 
   final normalizedSelectedDate = DateUtils.dateOnly(selectedDate);
 
@@ -55,7 +44,18 @@ final selectedPeriodExpenseProvider = Provider<AsyncValue<List<Expense>>>((
           return expenseDate.year == normalizedSelectedDate.year;
 
         case EnumPeriod.period:
-          return expenseDate == normalizedSelectedDate;
+          final start = selectedRangePeriod?.start;
+          final end = selectedRangePeriod?.end;
+
+          if (start == null || end == null) return false;
+
+          final normalizedStart = DateUtils.dateOnly(start);
+          final normalizedEnd = DateUtils.dateOnly(end);
+
+          return (expenseDate.isAtSameMomentAs(normalizedStart) ||
+                  expenseDate.isAfter(normalizedStart)) &&
+              (expenseDate.isAtSameMomentAs(normalizedEnd) ||
+                  expenseDate.isBefore(normalizedEnd));
       }
     }).toList();
   });

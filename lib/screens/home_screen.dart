@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:expense_tracker/providers/selected_period_expenses_provider.dart';
@@ -12,6 +13,28 @@ class HomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.listen<AsyncValue<List<Expense>>>(
+      selectedPeriodExpenseProvider,
+      (previous, next) {
+        if (next.hasError && !next.isLoading) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(next.error.toString()),
+              behavior: SnackBarBehavior.floating,
+              action: SnackBarAction(
+                label: 'Retry',
+                textColor: Colors.red,
+                onPressed: () {
+                  ref.invalidate(selectedPeriodExpenseProvider);
+                },
+              ),
+              showCloseIcon: true,
+            ),
+          );
+        }
+      },
+    );
+
     final filteredExpenses = ref.watch<AsyncValue<List<Expense>>>(
       selectedPeriodExpenseProvider,
     );
@@ -22,7 +45,7 @@ class HomeScreen extends ConsumerWidget {
           return Expanded(
             child: Center(
               child: Text(
-                "No expenses for the selected period.",
+                "No expenses for this period.",
                 style: Theme.of(context).textTheme.bodyLarge,
               ),
             ),
@@ -34,7 +57,38 @@ class HomeScreen extends ConsumerWidget {
         }
       },
       error: (error, stackTrace) {
-        return const Text("ERROR");
+        return Expanded(
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  Icons.error_outline,
+                  size: 60,
+                  color: Colors.red,
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  "Something went wrong.",
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  error.toString(),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 36),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    HapticFeedback.lightImpact();
+                    ref.invalidate(selectedPeriodExpenseProvider);
+                  },
+                  icon: const Icon(Icons.refresh),
+                  label: const Text("Try Again"),
+                ),
+              ],
+            ),
+          ),
+        );
       },
       loading: () {
         return Expanded(
@@ -54,7 +108,6 @@ class HomeScreen extends ConsumerWidget {
           ),
         ),
         centerTitle: true,
-        // backgroundColor: Colors.lightGreen,
         backgroundColor: Colors.blueGrey,
         leading: Builder(
           builder: (ctx) => IconButton(
@@ -71,20 +124,27 @@ class HomeScreen extends ConsumerWidget {
       drawer: MyDrawer(),
       body: Column(
         children: [
-          Container(
-            height: 20,
-            width: double.infinity,
-            decoration: BoxDecoration(
-              // color: Colors.lightGreen,
-              color: Colors.blueGrey,
-              borderRadius: BorderRadius.only(
-                bottomLeft: Radius.circular(16),
-                bottomRight: Radius.circular(16),
+          Stack(
+            children: [
+              Container(
+                height: 60,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: Colors.blueGrey,
+                  borderRadius: BorderRadius.only(
+                    bottomLeft: Radius.circular(16),
+                    bottomRight: Radius.circular(16),
+                  ),
+                ),
               ),
-            ),
+              Padding(
+                padding: const EdgeInsets.only(
+                  top: 16,
+                ),
+                child: const Summary(),
+              ),
+            ],
           ),
-          const SizedBox(height: 16),
-          const Summary(),
           const SizedBox(height: 16),
           content,
         ],
